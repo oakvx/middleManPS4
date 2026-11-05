@@ -1,69 +1,188 @@
-# fwSpoofer
+<div align="center">
 
-Strumenti di laboratorio per lo sviluppo e la verifica locale di payload PS4 e
-per l'analisi diagnostica della rete. Il nome del progetto è storico: **questo
-repository non implementa lo spoofing del firmware né un bypass PSN**.
+# middleManPS4
 
-## Funzionalità
+**PS4 Payload Research · Firmware Diagnostics · Network Observation**
 
-- Payload di esempio per una notifica e per la lettura in sola lettura della
-  versione del firmware.
-- Sender e controlli statici per file ELF, con test automatizzati eseguibili
-  senza una console.
-- Strumenti diagnostici per log e metadati di rete; il NetLab non decifra o
-  modifica il traffico TLS.
+[![Status](https://img.shields.io/badge/STATUS-WORK_IN_PROGRESS-F5A623?style=for-the-badge)](https://github.com/oakvx/middleManPS4)
+[![Version](https://img.shields.io/badge/VERSION-0.10.0-64748B?style=for-the-badge)](VERSION)
+[![Platform](https://img.shields.io/badge/PLATFORM-PS4-2563EB?style=for-the-badge)](https://github.com/oakvx/middleManPS4)
+[![Python](https://img.shields.io/badge/PYTHON-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](pyproject.toml)
 
-La compatibilità con modelli, firmware, loader e configurazioni specifiche non
-è garantita. I test locali non dimostrano il funzionamento su hardware reale.
-Usa gli strumenti solo su dispositivi e reti che possiedi o sei autorizzato a
-testare; payload e loader possono causare crash o perdita di dati.
+*An experimental toolkit for understanding how a PS4 loads homebrew payloads and communicates with network services.*
 
-## Requisiti
+[Overview](#overview) · [Project status](#project-status) · [Architecture](#architecture) · [Quick start](#quick-start) · [Roadmap](#roadmap)
 
-- Python 3.11 o successivo per i test e gli strumenti host.
-- Per compilare i payload: Linux o WSL Ubuntu e PS4 Payload SDK configurato.
-  La compilazione non è necessaria per eseguire i test host.
-- TShark è necessario solo per le funzioni di cattura che lo richiedono.
+</div>
 
-## Test locali
+> [!IMPORTANT]
+> **ACTIVE DEVELOPMENT — WIP / RESEARCH PROTOTYPE**
+>
+> **middleManPS4 does not currently bypass PlayStation Network authentication, spoof the system firmware, or enable PSN sign-in on unsupported firmware.** Those are research questions, **not available features**. This is not a plug-and-play PSN unlocker.
 
-Dalla directory principale del progetto:
+## Overview
+
+**middleManPS4** is an independent PS4 research workspace built around three complementary areas:
+
+- **Payload development:** compile, validate and transfer ELF test payloads using the PS4 Payload SDK and a compatible loader.
+- **System diagnostics:** read the software version and observe test-payload output without modifying the installed firmware.
+- **Network research:** collect limited DNS/TLS/TCP metadata and compare baseline traffic against a PSN sign-in attempt, without decrypting or rewriting HTTPS sessions.
+
+The original internal tooling is named **`fwSpoofer`**. The repository name **`middleManPS4`** reflects the long-term interest in network-path analysis; it does **not** imply that a working transparent MITM or authentication bypass is available.
+
+## Project status
+
+| Component | Status | Evidence / limitation |
+|:--|:--:|:--|
+| PS4 Payload SDK build | ✅ Verified | `hello_world.elf` and `firmware_info.elf` compiled under WSL |
+| BD-JB → GoldHEN → `elfldr` | ✅ Tested | TCP loader reachable on `9021` in one real-console setup |
+| ELF execution | ✅ Tested | Hello World notification observed on console |
+| Firmware readout | ✅ Tested | `sceKernelGetSystemSwVersion` returned `12.520.001` (`0x12520001`) |
+| Offline ELF checks and host tests | ✅ Available | Automated tests; not a guarantee of compatibility |
+| Klog diagnostic tooling | ✅ Available | No PSN-specific log event identified in the test run |
+| Passive network analysis | 🧪 In testing | Local capture verified; PS4-to-Internet visibility not established |
+| Gateway-based PSN traffic observation | ⏳ Planned | Requires a controlled network path |
+| Firmware-version spoofing | ❌ Not implemented | No firmware or kernel version patch |
+| PSN login bypass | ❌ Not implemented | No proof that a bypass is feasible |
+
+**Hardware experiment:** one PS4 on system software **12.52**, using **BD-JB** and **GoldHEN 2.4b18.7**. These results are **configuration-specific**; other firmware versions, jailbreak methods and loader builds may behave differently.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Console[PS4 · research target]
+        A["BD-JB + GoldHEN"] --> B["elfldr · TCP 9021"]
+        B --> C["Test ELF payloads"]
+        C --> D["Notification + firmware readout"]
+    end
+
+    subgraph Host[Windows / WSL · development host]
+        E["PS4 Payload SDK"] --> F["ELF validator + sender"]
+        G["Klog diagnostics"]
+        H["TShark / NetLab"]
+    end
+
+    F -->|"ELF transfer"| B
+    A -.->|"Klog, when enabled"| G
+    I["Controlled gateway / mirror · planned"] -.-> H
+    Console -.->|"Network traffic · only if routed through observer"| I
+```
+
+The network lab operates **independently** from the payload loader. Merely connecting a PC and PS4 to the same Wi-Fi network usually does **not** expose the console's Internet-bound unicast traffic to the PC.
+
+## Repository layout
+
+```text
+middleManPS4/
+├── payloads/     # PS4 test payloads and shared code
+├── host/         # Python sender, ELF validation and NetLab
+├── scripts/      # Build, bootstrap and offline verification helpers
+├── tests/        # Unit and regression tests
+├── docs/         # Architecture, experiments and technical notes
+├── configs/      # Configuration examples
+├── Makefile
+└── README.md
+```
+
+## Quick start
+
+### Requirements
+
+- **Python 3.11+** for host utilities and offline tests.
+- **Linux / WSL Ubuntu + [ps4-payload-dev/sdk](https://github.com/ps4-payload-dev/sdk)** for compiling PS4 payloads.
+- **TShark + Npcap** on Windows for network-capture experiments (optional).
+- An **owned or explicitly authorized** PS4 and network for hardware tests.
+
+### Clone and verify offline
 
 ```bash
+git clone https://github.com/oakvx/middleManPS4.git
+cd middleManPS4
+
 python -m unittest discover -s tests -v
 ```
 
-In alternativa, con GNU Make installato:
+For a full local preflight (including the repository's checksum manifest):
 
 ```bash
-make test
+python scripts/preflight_offline.py
 ```
 
-Per i requisiti e la procedura di compilazione dei payload, consulta
-[`docs/payload-development.md`](docs/payload-development.md). Le verifiche
-automatizzate usano simulazioni dove necessario e non sostituiscono test su
-hardware.
+> [!NOTE]
+> The preflight is **offline**. It cannot confirm that an ELF executed on a PS4, and its checksum check will fail after you modify any file listed in `SHA256SUMS.txt` until you regenerate the corresponding manifest entry.
 
-## Documentazione
+### Build test payloads
 
-- [Architettura](docs/architecture.md)
-- [Sviluppo dei payload](docs/payload-development.md)
-- [Informazioni sul firmware](docs/firmware-info.md)
-- [Diagnostica e analisi di rete](docs/PSN-NETLAB-v10.md)
+Configure the installed SDK and build from Linux or WSL:
+
+```bash
+export PS4_PAYLOAD_SDK="$HOME/ps4-payload-sdk-1252"  # adjust to your installation
+make
+```
+
+**Do not send experimental payloads to a console without reviewing the loader, firmware support and documentation first.** A successful TCP transfer does not prove remote execution.
+
+### Explore the network lab
+
+```bash
+# List capture interfaces
+python -m host.ps4_sender.psn_netdiag interfaces
+
+# Compare two existing metadata summaries (no network activity)
+python -m host.ps4_sender.psn_triage \
+  --baseline baseline.json \
+  --attempt psn_attempt.json
+```
+
+Read [PSN NetLab technical notes](docs/PSN-NETLAB-v10.md) before attempting a capture. **Do not upload packet captures, credentials, authentication tokens or identifiable network logs to public issues.**
+
+## Roadmap
+
+- [x] PS4 SDK toolchain and ELF payload build.
+- [x] GoldHEN / `elfldr` experimental loading path.
+- [x] Real-console Hello World and read-only firmware information tests.
+- [x] Offline validation, diagnostics and regression-test scaffolding.
+- [x] Initial passive packet-capture tooling.
+- [ ] Verify visibility of PS4 Internet traffic through a controlled gateway or mirrored port.
+- [ ] Characterize the system-update prompt and relevant *observable* network events.
+- [ ] Separate client-side checks from server-side requirements using reproducible evidence.
+- [ ] Assess whether any proposed spoofing technique is feasible, without assuming success.
+- [ ] Improve documentation, repeatability and compatibility reporting.
+
+## Research boundaries
+
+- **No PSN bypass is claimed.** A displayed firmware version is not proof of server acceptance.
+- **No TLS decryption or credential interception is provided.** The optional CONNECT tunnel forwards encrypted data without changing the contents.
+- **No permanent system update or firmware patch is performed by the current diagnostic payload.**
+- **No universal compatibility is claimed.** Payloads can crash a console or require a reboot.
+- **PSN access may require Sony-side checks that a local spoof cannot satisfy.** Modified systems may also face account or console restrictions.
+
+Use this repository **only on hardware and networks you own or are authorized to inspect**. Keep experiments reversible, avoid important accounts and never disclose session material.
+
+## Documentation
+
+- [Project architecture](docs/architecture.md)
+- [Payload development](docs/payload-development.md)
+- [Firmware information](docs/firmware-info.md)
+- [PSN NetLab](docs/PSN-NETLAB-v10.md)
 - [Changelog](CHANGELOG.md)
 
-Le note di ricerca possono descrivere esperimenti specifici e non costituiscono
-una dichiarazione di compatibilità o una garanzia di sicurezza.
+> [!WARNING]
+> Documentation is evolving with the experiments. Older notes may describe paths that were not yet validated when written; verify claims against the current code and test evidence.
 
-## Privacy e pubblicazione
+## License and contributions
 
-I risultati diagnostici possono contenere indirizzi IP e altri metadati della
-rete locale. Non pubblicare catture, log o riepiloghi reali senza averli
-controllati e anonimizzati. Gli output di compilazione e i risultati locali
-sono esclusi dal controllo versione tramite `.gitignore`.
+**No license has been published yet.** The source is viewable on GitHub, but this does not automatically grant permission to redistribute or reuse it. Contributions, issues and technical discussions should focus on reproducible observations, non-sensitive logs and clearly separated facts versus hypotheses.
 
-## Licenza
+---
 
-Non è ancora presente una licenza. Finché non ne viene scelta e aggiunta una,
-non si concede un'autorizzazione generale a riutilizzare o ridistribuire il
-codice.
+<div align="center">
+
+**middleManPS4** · *Built to investigate, not to overpromise.*
+
+**WORK IN PROGRESS — NOT A RELEASED PSN BYPASS**
+
+[Repository](https://github.com/oakvx/middleManPS4) · [Issues](https://github.com/oakvx/middleManPS4/issues)
+
+</div>
