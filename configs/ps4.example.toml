@@ -1,0 +1,8 @@
+# Solo documentazione / promemoria: la CLI riceve opzioni esplicite.
+host = "192.168.1.5"
+elfldr_port = 9021   # solo dopo il bootstrap di elfldr
+lua_port = 9026      # solo con remote_lua_loader attivo
+bootstrap_port = 9020
+klog_port = 3232
+legacy_goldhen_port = 9090
+payload = "dist/hello_world.elf"

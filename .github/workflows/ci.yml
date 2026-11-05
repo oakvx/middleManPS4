@@ -1,0 +1,42 @@
+name: Python, C mock and script checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit and C-mock tests (C tests run where a C compiler exists)
+        run: python -m unittest discover -s tests -v
+      - name: Python bytecode compilation
+        run: python -m compileall -q host tests
+      - name: Bash syntax on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in scripts/*.sh; do bash -n "$file"; done
+      - name: PowerShell AST parse on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($scriptFile in (Get-ChildItem scripts -Filter '*.ps1')) {
+            $tokens = $null
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              $scriptFile.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-List | Out-String | Write-Error
+              throw "PowerShell parse failure: $($scriptFile.Name)"
+            }
+          }
