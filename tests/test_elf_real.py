@@ -1,6 +1,7 @@
 """Validate an actual toolchain-produced PIE (not only synthetic headers)."""
 from __future__ import annotations
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -9,7 +10,8 @@ from host.ps4_sender.elfcheck import inspect_path
 
 CC = shutil.which('gcc') or shutil.which('clang')
 
-@unittest.skipUnless(CC, 'Host compiler not present')
+@unittest.skipUnless(sys.platform.startswith('linux') and CC,
+                     'Linux ELF-producing compiler required')
 class RealPIEELFTests(unittest.TestCase):
     def test_linux_pie_structure_as_generic_elf_fixture(self):
         with tempfile.TemporaryDirectory() as d:
