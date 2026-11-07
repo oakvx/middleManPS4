@@ -7,7 +7,7 @@
 <p>
 <img src="https://img.shields.io/badge/status-research%20%2F%20WIP-F5A623?style=flat-square"/>
 <img src="https://img.shields.io/badge/PSN%20bypass-not%20implemented-E5484D?style=flat-square"/>
-<img src="https://img.shields.io/badge/snapshot-v0.15.0-64748B?style=flat-square"/>
+<img src="https://img.shields.io/badge/snapshot-v0.16.0-64748B?style=flat-square"/>
 <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/github/actions/workflow/status/oakvx/middleManPS4/ci.yml?branch=main&style=flat-square&label=CI"/>
 </p>
@@ -68,13 +68,28 @@ credentials, spoof firmware, or bypass authentication.
 See [Observer v0.15](docs/OBSERVER-v15.md) for exact limitations and
 the optional experimental build.
 
+## gate trace v0.16 (offline, WIP)
+
+A new metadata-only correlator reads allowlisted `observer.elf` stdout and
+an existing `psn_netdiag` JSON. You can annotate when the update dialog
+appeared and count DNS/TCP/TLS **metadata** on either side of the marker.
+The clock marker is entered manually; this is **not** synchronized PSN
+process tracing or proof of a local/server firmware gate.
+
+```powershell
+python -m host.ps4_sender.gate_trace --observer examples/observer_v016_sample.txt --network examples/netmeta_v016_sample.json --prompt-second 5 --window-seconds 3
+```
+
+The included inputs are **synthetic examples**; no PS4 access is needed.
+See [Gate Trace v0.16](docs/GATE-TRACE-v16.md) for limitations.
+
 ## hardware evidence
 
 One console: PS4, 12.52, BD-JB, GoldHEN 2.4b18.7. Nothing below generalizes past this config.
 
 | | result |
 |---|---|
-| build + offline host tests | tested — 195 tests pass |
+| build + offline host tests | host Python/C tests; see CI for latest results |
 | GoldHEN → `elfldr` on TCP 9021 | tested |
 | hello-world payload | tested — notification on console |
 | firmware readout | tested — returns `12.520.001` |
@@ -97,7 +112,7 @@ python -m host.ps4_sender.rekit analyze .\dist\firmware_info.elf --output .\repo
 python -m host.ps4_sender.rekit markdown .\reports\case.json --output .\reports\case.md
 ```
 
-`--output` never overwrites — use a new filename per run. v0.14 commands need v0.14 code; a fresh clone of `main` may lag behind.
+`--output` never overwrites — use a new filename per run.
 
 <details>
 <summary><b>rekit — offline binary analysis</b></summary>
@@ -173,7 +188,8 @@ flowchart LR
 - [x] add read-only observer prototype (host mocks only)
 - [ ] run the Ghidra export on a real install
 - [ ] show PS4 → Internet visibility through a gateway/mirror
-- [ ] correlate client-side events with network observations
+- [x] offline metadata-only prompt/Observer report (manual marker)
+- [ ] correlate system-process events with network observations
 - [ ] investigate whether the version check is even interceptable
 - [ ] packaging, docs
 
@@ -181,6 +197,7 @@ flowchart LR
 
 | | |
 |---|---|
+| [Gate Trace v0.16](docs/GATE-TRACE-v16.md) | offline Observer and prompt metadata timeline |
 | [RE Toolkit v0.14](docs/RE-TOOLKIT-v14.md) | report commands, Ghidra inventory |
 | [Network visibility v0.11](docs/PSN-VISIBILITY-v11.md) | what "on-path" actually means |
 | [PSN NetLab v0.10](docs/PSN-NETLAB-v10.md) | metadata diagnostics |
