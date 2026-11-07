@@ -34,8 +34,11 @@ SAMPLE = "\n".join((
 class NetDiagTests(unittest.TestCase):
     def test_extracts_only_ps4_dns_tls_tcp_metadata(self):
         s = n.summarise_tshark(SAMPLE, PS4)
-        self.assertEqual(s["counts"], {"dns": 1, "tcp_syn": 1, "tls_clienthello": 1,
-                                        "tcp_rst": 1, "tls_alert": 1})
+        for key in ("dns", "tcp_syn", "tls_clienthello", "tcp_rst", "tls_alert"):
+            self.assertEqual(s["counts"][key], 1)
+        self.assertEqual(s["counts"]["ipv4_packets"], 5)
+        self.assertEqual(s["counts"]["ps4_outbound_public_ipv4"], 3)
+        self.assertEqual(n.capture_visibility(s)["status"], "public_destination_observed")
         self.assertEqual(s["dns_names"], ["example.com"])
         self.assertEqual(s["tls_sni"], ["example.com"])
         self.assertNotIn("private@example.org", json.dumps(s))
@@ -45,6 +48,38 @@ class NetDiagTests(unittest.TestCase):
         s = n.summarise_tshark(row("0.1", PS4, "1.1.1.1", "53", "token=SECRET@domain.org"), PS4)
         self.assertEqual(s["dns_names"], [])
         self.assertNotIn("SECRET", json.dumps(s))
+
+    def test_lan_ping_is_not_internet_path_proof(self):
+        ping = row("0.1", PS4, "192.168.31.122", "", "", "", "", "", "", "", "1")
+        result = n.summarise_tshark(ping, PS4)
+        self.assertEqual(result["counts"]["ps4_icmp_packets"], 1)
+        self.assertEqual(result["counts"]["ipv4_packets"], 1)
+        self.assertEqual(result["counts"]["ps4_outbound_public_ipv4"], 0)
+        self.assertEqual(result["events"], [])
+        self.assertEqual(n.capture_visibility(result)["status"],
+                         "only_nonpublic_or_inbound_observed")
+
+    def test_public_udp_counts_without_dns_or_tls(self):
+        udp = row("1.2", PS4, "1.1.1.1", "", "", "", "", "", "", "", "17")
+        result = n.summarise_tshark(udp, PS4)
+        self.assertEqual(result["counts"]["ps4_outbound_public_ipv4"], 1)
+        self.assertEqual(result["public_ips"], ["1.1.1.1"])
+        self.assertEqual(result["events"], [])
+        self.assertEqual(n.capture_visibility(result)["status"], "public_destination_observed")
+
+    def test_only_outgoing_syn_without_ack_counts_as_new_connection(self):
+        synack = row("1.2", "1.1.1.1", PS4, "", "", "", "", "1", "", "", "6", "1")
+        result = n.summarise_tshark(synack, PS4)
+        self.assertEqual(result["counts"].get("tcp_syn", 0), 0)
+        self.assertEqual(result["counts"]["ps4_inbound_public_ipv4"], 1)
+
+    def test_legacy_json_reports_visibility_not_measured(self):
+        legacy = {"format": "fwSpoofer-netmeta-v1", "counts": {}}
+        self.assertEqual(n.capture_visibility(legacy)["status"], "not_measured")
+        broken = dict(legacy, counts={"ipv4_packets": -1,
+                                      "ps4_outbound_public_ipv4": 2})
+        with self.assertRaises(n.DiagnosticError):
+            n.capture_visibility(broken)
 
     def test_bad_times_rejected(self):
         s = n.summarise_tshark(row("nan", PS4, "1.1.1.1", "53", "example.com") + "\n" +
@@ -74,6 +109,7 @@ class NetDiagTests(unittest.TestCase):
             self.assertEqual(summary["counts"]["dns"], 1)
             self.assertIn("-r", calls[0])
             self.assertIn("-T", calls[0])
+            self.assertEqual(calls[0][calls[0].index("-Y") + 1], f"ip.addr == {PS4}")
             self.assertNotIn("-w", calls[0])
 
     def test_rejects_big_pcap_and_overwrites(self):

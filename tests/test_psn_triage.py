@@ -23,6 +23,22 @@ class TriageTests(unittest.TestCase):
         self.assertIn('non determinano', result['interpretation'])
         self.assertNotIn('token=', json.dumps(result))
 
+    def test_icmp_only_is_not_internet_visibility(self):
+        attempt = dict(self.base,
+                       counts={'ipv4_packets': 10, 'ps4_icmp_packets': 10,
+                               'ps4_outbound_public_ipv4': 0})
+        result = triage(self.base, attempt)
+        self.assertEqual(result['capture_visibility']['status'],
+                         'only_nonpublic_or_inbound_observed')
+        self.assertIn('NON traffico in uscita', result['interpretation'])
+
+    def test_public_packet_observation_is_not_psn_success(self):
+        attempt = dict(self.base, counts={'ipv4_packets': 8,
+                                         'ps4_outbound_public_ipv4': 3})
+        result = triage(self.base, attempt)
+        self.assertEqual(result['capture_visibility']['status'], 'public_destination_observed')
+        self.assertIn('NON prova accesso PSN', result['interpretation'])
+
     def test_wrong_format_fails(self):
         with self.assertRaises(DiagnosticError):
             triage(self.base, dict(self.base, format='unknown'))

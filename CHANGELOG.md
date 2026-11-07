@@ -1,3 +1,39 @@
+# v0.14.0 — Integrated Offline RE Pipeline (2026-11-06)
+
+- Added bounded `rekit.dynlib` for the documented Orbis `PT_SCE_DYNLIBDATA` string table, scoped syntactic NID candidates, and packed library/module string entries.
+- Added `rekit.report` for a single-pass ELF/SELF/PSF case, SHA-256 provenance, Ghidra inventory *name* correlation (unverified provenance), and optional sanitized network timeline (*not* attributable to a binary).
+- New CLI: `dynlib`, `analyze`, `analyze-diff`, `batch`, and `markdown`, with exclusive file creation and no network/PS4 side effects.
+- Ghidra subprocess success now requires valid JSON inventory, not only exit code zero.
+- Added 14 integration/regression tests, including malformed Orbis dynamic data, false-positive NID scoping, end-to-end report, batch and Markdown cases. Existing 181 tests retained.
+- Ghidra runtime and console PSN behavior remain **unverified**; no firmware spoofing or PSN bypass is implemented.
+
+# v0.13.0 — Orbis ELF & Ghidra Research Bridge (2026-11-06)
+
+- Corrected ELF type label `0xFE10 → ET_SCE_EXEC_ASLR` and `0xFE18 → ET_SCE_DYNAMIC` from OpenOrbis specifications; recognized `PT_SCE_RELRO`.
+- Added bounded `rekit.orbis` dynamic table inspection and virtual-to-file resolution of standard `DT_NEEDED` libraries. Orbis-specific tags remain uninterpreted raw values.
+- Added `rekit.nids`: candidate NID inventory with file offset and decoded library/module index characters, no plaintext-name assertion.
+- Added optional Ghidra Java exporter and headless plan/run bridge with bounded JSON inventory, read-only function and external symbol listing, run-on-explicit-command and non-overwrite safeguards.
+- Added offline Ghidra summary and inventory name-diff commands, 16 additional regression tests: 181 passing on the current snapshot.
+- Tested `dist/firmware_info.elf` parser on the included build; `DT_NEEDED`: `libkernel_web.sprx`, `libSceLibcInternal.sprx`, `libSceNet.sprx`.
+- Ghidra runtime **not** tested (not installed in preparation environment). No PS4 runtime, firmware spoofing, PSN sign-in or interception bypass implemented.
+
+# v0.12.0 — Offline Reverse Engineering Toolkit (2026-11-06)
+
+- Added `host.ps4_sender.rekit` with read-only modules: generic ELF/Orbis/SELF header identification, bounded raw PSF parser, conservative Orbis-style symbol/NID candidate scanner, and five-second network metadata correlation.
+- New CLI: `python -m host.ps4_sender.rekit {binary,psf,symbols,net,net-diff}`.
+- Added 23 offline unit/CLI tests (165 total, all passing on the current snapshot), documentation, source references, and checksum manifest refresh.
+- Verified with the project's included `firmware_info.elf`: `sceKernelGetSystemSwVersion` and several `libSce*.sprx` strings detected.
+- No PS4 runtime testing, firmware spoofing, SELF decryption, PSN authentication modification, or bypass.
+
+# v0.11.0 — Verifica visibilita traffico Internet PS4 (2026-11-06)
+
+- Contatori IPv4 completi nella diagnostica TShark, anche per ICMP, UDP e pacchetti senza metadati DNS/TLS.
+- Distinzione tra solo traffico LAN e pacchetti PS4 verso IP pubblici; non confonde il ping con l'osservazione del percorso Internet.
+- `psn_triage` segnala lo stato `capture_visibility` e mantiene compatibilita con i JSON v0.10, per cui la visibilita resta `not_measured`.
+- Sei test di regressione aggiuntivi: suite offline di 142 test superata.
+- Nuovo runbook `docs/PSN-VISIBILITY-v11.md` con due topologie riproducibili: hotspot Windows o condivisione Wi-Fi → Ethernet.
+- Nessuna modifica a rete reale, TLS, autenticazione PSN, firmware o kernel.
+
 # v0.10.0 — PSN NetLab: osservazione passiva e confronto (2026-11-05)
 
 - Modulo `psn_netdiag`: cattura e analisi DNS/TLS metadata via TShark, file PCAP temporanei eliminati al termine.

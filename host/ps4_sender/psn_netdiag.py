@@ -25,10 +25,8 @@ MAX_EVENTS = 5000
 FIELDS = (
     "frame.time_relative", "ip.src", "ip.dst", "tcp.dstport", "dns.qry.name",
     "tls.handshake.type", "tls.handshake.extensions_server_name", "tcp.flags.syn",
-    "tcp.flags.reset", "tls.record.content_type"
+    "tcp.flags.reset", "tls.record.content_type", "ip.proto", "tcp.flags.ack"
 )
-FILTER = ("dns.qry.name or tls.handshake.type == 1 or tcp.flags.syn == 1 "
-          "or tcp.flags.reset == 1 or tls.record.content_type == 21")
 HOST_RE = re.compile(r"^[A-Za-z0-9._-]{1,253}$", re.ASCII)
 
 
@@ -69,7 +67,8 @@ def normalize_ip(value: str) -> str | None:
 def summarise_tshark(tsv: str, ps4_ip: str) -> dict:
     """Consume only TShark -T fields output; never handles HTTP or TLS payloads."""
     events = []
-    counts: Counter[str] = Counter()
+    counts: Counter[str] = Counter({"ipv4_packets": 0, "ps4_outbound_public_ipv4": 0,
+                                    "ps4_inbound_public_ipv4": 0, "ps4_icmp_packets": 0})
     dns: set[str] = set()
     snis: set[str] = set()
     ips: set[str] = set()
@@ -77,7 +76,8 @@ def summarise_tshark(tsv: str, ps4_ip: str) -> dict:
         cols = line.rstrip("\r").split("\t")
         if len(cols) < len(FIELDS):
             cols += [""] * (len(FIELDS) - len(cols))
-        timestamp, src, dst, dstport, dns_name, hs_type, sni, syn, rst, rec_type = cols[:len(FIELDS)]
+        (timestamp, src, dst, dstport, dns_name, hs_type, sni, syn, rst,
+         rec_type, ip_proto, ack) = cols[:len(FIELDS)]
         if not (ip_is_ps4(src, ps4_ip) or ip_is_ps4(dst, ps4_ip)):
             continue
         try:
@@ -86,19 +86,31 @@ def summarise_tshark(tsv: str, ps4_ip: str) -> dict:
             continue
         if not math.isfinite(seconds) or seconds < 0:
             continue
+        # A visible ping to/from the PC is *not* evidence that Internet-bound
+        # PS4 traffic crosses this interface. Classify packet direction first.
+        counts["ipv4_packets"] += 1
+        if ip_proto == "1":
+            counts["ps4_icmp_packets"] += 1
+        public_dst = normalize_ip(dst) if src == ps4_ip else None
+        public_src = normalize_ip(src) if dst == ps4_ip else None
+        if public_dst and ipaddress.ip_address(public_dst).is_global:
+            counts["ps4_outbound_public_ipv4"] += 1
+            ips.add(public_dst)
+        if public_src and ipaddress.ip_address(public_src).is_global:
+            counts["ps4_inbound_public_ipv4"] += 1
         observed = []
-        name = normal_host(dns_name)
-        server_name = normal_host(sni)
+        name = normal_host(dns_name) if src == ps4_ip else None
+        server_name = normal_host(sni) if src == ps4_ip else None
         if name:
             counts["dns"] += 1
             dns.add(name)
             observed.append(("dns", name))
-        if hs_type.split(",")[0] == "1":
+        if src == ps4_ip and hs_type.split(",")[0] == "1":
             counts["tls_clienthello"] += 1
             if server_name:
                 snis.add(server_name)
             observed.append(("tls_clienthello", server_name))
-        if syn == "1":
+        if src == ps4_ip and syn == "1" and ack != "1":
             counts["tcp_syn"] += 1
             observed.append(("tcp_syn", None))
         if rst == "1":
@@ -107,11 +119,6 @@ def summarise_tshark(tsv: str, ps4_ip: str) -> dict:
         if rec_type.split(",")[0] == "21":
             counts["tls_alert"] += 1
             observed.append(("tls_alert", None))
-        # Only the destination for outbound packets from the actual PS4.
-        if src == ps4_ip:
-            public = normalize_ip(dst)
-            if public and ipaddress.ip_address(public).is_global:
-                ips.add(public)
         for kind, host in observed:
             if len(events) < MAX_EVENTS:
                 events.append({"t": round(seconds, 3), "kind": kind, "host": host,
@@ -126,7 +133,12 @@ def summarise_tshark(tsv: str, ps4_ip: str) -> dict:
 def read_capture(path: Path, ps4_ip: str, *, runner=subprocess.run, tshark: str) -> dict:
     if not path.is_file() or path.stat().st_size > MAX_PCAP:
         raise DiagnosticError("PCAP mancante o maggiore di 64 MiB")
-    cmd = [tshark, "-r", str(path), "-Y", FILTER, "-T", "fields", "-E", "occurrence=f"]
+    # Decode *all* IPv4 packets involving the PS4; otherwise ICMP and
+    # non-DNS/TLS traffic would be invisible and the capture could look empty.
+    if not _valid_ps4_ip(ps4_ip):
+        raise DiagnosticError("IP PS4 non valido per l'analisi")
+    cmd = [tshark, "-r", str(path), "-Y", f"ip.addr == {ps4_ip}",
+           "-T", "fields", "-E", "occurrence=f"]
     for name in FIELDS:
         cmd.extend(("-e", name))
     try:
@@ -158,6 +170,9 @@ def load_summary(path: Path) -> dict:
     except json.JSONDecodeError:
         data = None
     if isinstance(data, dict) and data.get("format") == "fwSpoofer-netmeta-v1":
+        if not isinstance(data.get("ps4_ip"), str) or not _valid_ps4_ip(data["ps4_ip"]):
+            raise DiagnosticError("Riepilogo con IP PS4 non valido")
+        capture_visibility(data)
         return data
     # Tunnel JSONL: no HTTP content, no TLS keys or request headers.
     hosts = set()
@@ -214,13 +229,47 @@ def _valid_ps4_ip(value: str) -> bool:
     return parsed.version == 4 and parsed.is_private and not parsed.is_loopback
 
 
+def capture_visibility(summary: dict) -> dict:
+    """Describe *observed* traffic only; never infer packet-path certainty.
+
+    Legacy v0.10 JSON files lack packet counters and remain inconclusive.
+    """
+    counts = summary.get("counts", {})
+    if not isinstance(counts, dict) or "ipv4_packets" not in counts:
+        return {"status": "not_measured", "ipv4_packets": None,
+                "outbound_public_packets": None}
+    total = counts.get("ipv4_packets")
+    outbound = counts.get("ps4_outbound_public_ipv4")
+    if (not isinstance(total, int) or isinstance(total, bool) or total < 0 or
+            not isinstance(outbound, int) or isinstance(outbound, bool) or
+            outbound < 0 or outbound > total):
+        raise DiagnosticError("Contatori di visibilita' non validi")
+    if outbound:
+        status = "public_destination_observed"
+    elif total:
+        status = "only_nonpublic_or_inbound_observed"
+    else:
+        status = "no_ipv4_packets_observed"
+    return {"status": status, "ipv4_packets": total,
+            "outbound_public_packets": outbound}
+
+
 def _display(summary: dict) -> None:
     print("=== RIEPILOGO METADATI (NON CONTENUTO HTTPS) ===")
-    for key in ("dns", "tls_clienthello", "tcp_syn", "tcp_rst", "tls_alert"):
+    for key in ("ipv4_packets", "ps4_icmp_packets", "ps4_outbound_public_ipv4",
+                "ps4_inbound_public_ipv4", "dns", "tls_clienthello", "tcp_syn",
+                "tcp_rst", "tls_alert"):
         print(f"{key}: {summary['counts'].get(key, 0)}")
     print(f"Nomi DNS distinti: {len(summary['dns_names'])}; SNI distinti: {len(summary['tls_sni'])}")
-    if not summary["events"]:
-        print("ATTENZIONE: nessun evento PS4 osservato. Il PC potrebbe non trovarsi nel percorso di rete.")
+    visibility = capture_visibility(summary)
+    if visibility["status"] == "no_ipv4_packets_observed":
+        print("Nessun pacchetto IPv4 PS4 visibile su questa interfaccia.")
+    elif visibility["status"] == "only_nonpublic_or_inbound_observed":
+        print("Pacchetti PS4 visibili, ma nessuna uscita PS4 verso IP pubblici: "
+              "NON dimostra che il PC osservi il traffico Internet della console.")
+    elif visibility["status"] == "public_destination_observed":
+        print("Osservati pacchetti PS4 verso IP pubblici su questa interfaccia; "
+              "non e' prova di login PSN, ne' di visibilita' completa.")
     print("La sola presenza di DNS/SNI non dimostra autenticazione né origine del blocco PSN.")
 
 
