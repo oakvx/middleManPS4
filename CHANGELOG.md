@@ -1,3 +1,11 @@
+# v0.17.0 — Integrated Offline Research Workbench (2026-11-07)
+
+- Added `host.ps4_sender.workbench` CLI: bounded case reports, SHA-256 source fingerprints, integrity verification, deterministic metadata replay.
+- Added static ELF/PSF binary diff via `rekit`, without SELF decryption or firmware patches.
+- Added a localhost-only read-only dashboard (no CDN/telemetry), rule-based research assistant and opt-in localhost Ollama explanations with redirects/proxies disabled.
+- Added unit/integration tests for untrusted input, source provenance, binary diff, report integrity, localhost HTTP, and model opt-in.
+- No new console runtime: Observer remains self-process-only; PSN login/firmware spoofing and interception are not implemented.
+
 # v0.16.0 — Offline Gate Trace Correlator (2026-11-07)
 
 - Added `host.ps4_sender.gate_trace`: bounded, allowlist-only parsing of Observer stdout and offline comparison against existing sanitized `psn_netdiag` metadata.
