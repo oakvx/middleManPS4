@@ -1,0 +1,17 @@
+{
+  "format": "fwSpoofer-netmeta-v1",
+  "ps4_ip": "192.168.137.10",
+  "counts": {
+    "ipv4_packets": 15,
+    "ps4_outbound_public_ipv4": 7
+  },
+  "dns_names": [],
+  "tls_sni": [],
+  "public_ips": [],
+  "events": [
+    {"t": 3.2, "kind": "dns"},
+    {"t": 4.1, "kind": "tcp_syn"},
+    {"t": 5.4, "kind": "tls_clienthello"},
+    {"t": 7.0, "kind": "tcp_rst"}
+  ]
+}

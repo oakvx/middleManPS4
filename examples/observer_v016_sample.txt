@@ -1,0 +1,15 @@
+SYNTHETIC EXAMPLE -- DO NOT TREAT AS PS4 HARDWARE EVIDENCE
+[middleManPS4/observer] event=start pid=123 firmware=12.520.001 (raw 0x12520001)
+[middleManPS4/observer] event=heartbeat sample=1
+[middleManPS4/observer] event=heartbeat sample=2
+[middleManPS4/observer] event=heartbeat sample=3
+[middleManPS4/observer] event=heartbeat sample=4
+[middleManPS4/observer] event=heartbeat sample=5
+[middleManPS4/observer] event=heartbeat sample=6
+[middleManPS4/observer] event=heartbeat sample=7
+[middleManPS4/observer] event=heartbeat sample=8
+[middleManPS4/observer] event=heartbeat sample=9
+[middleManPS4/observer] event=heartbeat sample=10
+[middleManPS4/observer] event=heartbeat sample=11
+[middleManPS4/observer] event=heartbeat sample=12
+[middleManPS4/observer] event=complete samples=12
