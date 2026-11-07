@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ps4-firmware-lab"
-version = "0.17.0"
+version = "0.18.0"
 description = "Research scaffolding for local PS4 payload-development experiments"
 requires-python = ">=3.11"
 dependencies = []

@@ -1,3 +1,11 @@
+# v0.18.0 — Experimental LAN Live Agent (2026-11-07)
+
+- Added a bounded Python 3.11+ live receiver with explicit PS4 IP allowlist, fresh HMAC-SHA256 challenge, signed event frames, sanitized event storage, optional exclusive JSONL log and localhost-only dashboard.
+- Added a read-only C self-process ELF agent, SHA-256/HMAC implementation, host C integration tests and a synthetic localhost simulator. PS4 12.52 SDK cross-build and runtime remain **unverified**.
+- Added a private pairing configuration generator and opt-in `make -C payloads live_agent` target. Default payload build remains unchanged.
+- Added structural OpenOrbis PKG input staging with tests; **this does not build an application eboot.bin or installable .pkg**.
+- No global syscall tracing, privileged kernel hooks, credential collection, PSN protocol modification or firmware bypass.
+
 # v0.17.0 — Integrated Offline Research Workbench (2026-11-07)
 
 - Added `host.ps4_sender.workbench` CLI: bounded case reports, SHA-256 source fingerprints, integrity verification, deterministic metadata replay.

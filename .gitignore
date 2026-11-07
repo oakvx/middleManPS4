@@ -20,3 +20,6 @@ __pycache__/
 /reports/
 /ghidra-projects/
 /fwSpoofer.zip
+
+# Private key compiled into experimental LAN ELF; never commit
+/payloads/live_agent/live_agent_config.h
