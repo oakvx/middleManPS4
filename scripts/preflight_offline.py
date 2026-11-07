@@ -9,6 +9,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def checkout_hash_matches(data: bytes, digest: str) -> bool:
+    """Accept exact bytes or CRLF-only normalization of a text checkout.
+
+    Git on Windows may rewrite LF to CRLF. All other changes still fail.
+    Binary files are never line-ending normalized.
+    """
+    if hashlib.sha256(data).hexdigest() == digest:
+        return True
+    if b"\r\n" in data and b"\x00" not in data:
+        normalized = data.replace(b"\r\n", b"\n")
+        return hashlib.sha256(normalized).hexdigest() == digest
+    return False
+
+
 def check_manifest() -> bool:
     path = ROOT / 'SHA256SUMS.txt'
     if not path.exists():
@@ -27,7 +41,7 @@ def check_manifest() -> bool:
         if not resolved.is_relative_to(ROOT.resolve()) or not resolved.is_file():
             print(f'FAIL: file missing/outside project: {filename}')
             return False
-        if hashlib.sha256(resolved.read_bytes()).hexdigest() != digest:
+        if not checkout_hash_matches(resolved.read_bytes(), digest):
             print(f'FAIL: local file modified since archive creation: {filename}')
             return False
         count += 1
