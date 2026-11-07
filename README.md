@@ -7,7 +7,7 @@
 <p>
 <img src="https://img.shields.io/badge/status-research%20%2F%20WIP-F5A623?style=flat-square"/>
 <img src="https://img.shields.io/badge/PSN%20bypass-not%20implemented-E5484D?style=flat-square"/>
-<img src="https://img.shields.io/badge/snapshot-v0.16.0-64748B?style=flat-square"/>
+<img src="https://img.shields.io/badge/snapshot-v0.17.0-64748B?style=flat-square"/>
 <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/github/actions/workflow/status/oakvx/middleManPS4/ci.yml?branch=main&style=flat-square&label=CI"/>
 </p>
@@ -82,6 +82,25 @@ python -m host.ps4_sender.gate_trace --observer examples/observer_v016_sample.tx
 
 The included inputs are **synthetic examples**; no PS4 access is needed.
 See [Gate Trace v0.16](docs/GATE-TRACE-v16.md) for limitations.
+
+## research workbench v0.17 (offline, WIP)
+
+The unified workbench combines the experimental Observer stdout parser,
+metadata-based Network Intelligence, offline ELF/PSF static binary diff, a
+**localhost-only read-only dashboard**, rule-based analysis with separately
+opt-in *local* Ollama, a non-transmitting event replay, and SHA-256 integrity
+reports.
+
+```powershell
+New-Item -ItemType Directory -Force .\reports | Out-Null
+python -m host.ps4_sender.workbench case --observer examples/observer_v016_sample.txt --network examples/netmeta_v016_sample.json --prompt-second 5 --output reports\synthetic.json
+python -m host.ps4_sender.workbench verify --report reports\synthetic.json
+python -m host.ps4_sender.workbench dashboard --report reports\synthetic.json
+```
+
+Demo inputs are **synthetic**. System-wide process enumeration and firmware
+gate attribution are **not implemented or proven**.
+See [Research Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md).
 
 ## hardware evidence
 
@@ -191,12 +210,16 @@ flowchart LR
 - [x] offline metadata-only prompt/Observer report (manual marker)
 - [ ] correlate system-process events with network observations
 - [ ] investigate whether the version check is even interceptable
-- [ ] packaging, docs
+- [x] unified offline workbench, deterministic replay, integrity and local dashboard
+- [ ] read-only system process inventory validated on console
+- [ ] live PS4 gateway capture and independently timed gate analysis
+- [ ] packaging and end-user deployment
 
 ## docs
 
 | | |
 |---|---|
+| [Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md) | case, firmware diff, assistant, replay and dashboard |
 | [Gate Trace v0.16](docs/GATE-TRACE-v16.md) | offline Observer and prompt metadata timeline |
 | [RE Toolkit v0.14](docs/RE-TOOLKIT-v14.md) | report commands, Ghidra inventory |
 | [Network visibility v0.11](docs/PSN-VISIBILITY-v11.md) | what "on-path" actually means |
