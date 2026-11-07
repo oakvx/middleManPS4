@@ -1,3 +1,11 @@
+# v0.15.0 — Read-only Observer prototype & cleanup (WIP)
+
+- Added optional `observer.elf`: self-PID, firmware readout and 12 bounded heartbeats.
+- Added host C-mock regression covering normal and error paths; PS4 runtime untested.
+- Added `make observer` without changing the existing default payload build.
+- Updated README/manifest; optional removal of obsolete large `fwSpoofer.zip`.
+- No PSN process hooks, TLS interception, credential capture, firmware spoof or login bypass.
+
 # v0.14.0 — Integrated Offline RE Pipeline (2026-11-06)
 
 - Added bounded `rekit.dynlib` for the documented Orbis `PT_SCE_DYNLIBDATA` string table, scoped syntactic NID candidates, and packed library/module string entries.

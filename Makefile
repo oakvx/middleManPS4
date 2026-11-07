@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := all
 PS4_PAYLOAD_SDK ?= $(HOME)/ps4-payload-sdk-1252
 export PS4_PAYLOAD_SDK
-.PHONY: all clean test check verify doctor loader-build
+.PHONY: all clean test check verify doctor loader-build observer
 all:
 	$(MAKE) -C payloads all
 clean:
@@ -23,3 +23,6 @@ doctor:
 
 loader-build:
 	bash scripts/setup_elfldr.sh
+
+observer:
+	$(MAKE) -C payloads observer

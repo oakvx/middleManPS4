@@ -7,7 +7,7 @@
 <p>
 <img src="https://img.shields.io/badge/status-research%20%2F%20WIP-F5A623?style=flat-square"/>
 <img src="https://img.shields.io/badge/PSN%20bypass-not%20implemented-E5484D?style=flat-square"/>
-<img src="https://img.shields.io/badge/snapshot-v0.14.0-64748B?style=flat-square"/>
+<img src="https://img.shields.io/badge/snapshot-v0.15.0-64748B?style=flat-square"/>
 <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/github/actions/workflow/status/oakvx/middleManPS4/ci.yml?branch=main&style=flat-square&label=CI"/>
 </p>
@@ -56,6 +56,17 @@ This repo exists to chip away at those three with evidence, not to skip past the
 | firmware diagnostics | read-only `sceKernelGetSystemSwVersion`, nothing else |
 | network lab | passive DNS/TLS/TCP metadata, baseline vs. sign-in attempt |
 | rekit | offline ELF/Orbis/PSF/NID inspection, JSON/Markdown reports, optional Ghidra export |
+
+## observer ELF (experimental, WIP)
+
+The new `observer.elf` is a **read-only self-observation prototype**:
+it reads firmware information, prints its own PID and emits 12 timed
+heartbeats. Host-C mock tests pass; PS4 cross-build/runtime is **not yet
+verified**. It does **not** hook PSN processes, decrypt TLS, collect
+credentials, spoof firmware, or bypass authentication.
+
+See [Observer v0.15](docs/OBSERVER-v15.md) for exact limitations and
+the optional experimental build.
 
 ## hardware evidence
 
@@ -159,6 +170,7 @@ flowchart LR
 - [x] host test scaffolding
 - [x] passive network metadata
 - [x] offline ELF/Orbis/PSF/NID inspection
+- [x] add read-only observer prototype (host mocks only)
 - [ ] run the Ghidra export on a real install
 - [ ] show PS4 → Internet visibility through a gateway/mirror
 - [ ] correlate client-side events with network observations

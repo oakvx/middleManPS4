@@ -19,3 +19,4 @@ __pycache__/
 # Sensitive local reverse-engineering outputs
 /reports/
 /ghidra-projects/
+/fwSpoofer.zip
