@@ -1,3 +1,10 @@
+# v0.16.0 — Offline Gate Trace Correlator (2026-11-07)
+
+- Added `host.ps4_sender.gate_trace`: bounded, allowlist-only parsing of Observer stdout and offline comparison against existing sanitized `psn_netdiag` metadata.
+- Manual update-prompt marker splits DNS/TCP/TLS event counts into pre/post windows. No automatic clock synchronization, causal attribution or PSN authentication inference.
+- Added synthetic fixtures, operator documentation and 16 targeted regression tests for malformed data, sequence validation, sanitization and exclusive report creation.
+- No on-console changes in this release; existing Observer ELF remains experimental and untested on this SDK. No firmware spoof, TLS decryption, credential capture or PSN bypass.
+
 # v0.15.0 — Read-only Observer prototype & cleanup (WIP)
 
 - Added optional `observer.elf`: self-PID, firmware readout and 12 bounded heartbeats.
