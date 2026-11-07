@@ -7,7 +7,7 @@
 <p>
 <img src="https://img.shields.io/badge/status-research%20%2F%20WIP-F5A623?style=flat-square"/>
 <img src="https://img.shields.io/badge/PSN%20bypass-not%20implemented-E5484D?style=flat-square"/>
-<img src="https://img.shields.io/badge/snapshot-v0.17.0-64748B?style=flat-square"/>
+<img src="https://img.shields.io/badge/snapshot-v0.18.0-64748B?style=flat-square"/>
 <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/github/actions/workflow/status/oakvx/middleManPS4/ci.yml?branch=main&style=flat-square&label=CI"/>
 </p>
@@ -101,6 +101,28 @@ python -m host.ps4_sender.workbench dashboard --report reports\synthetic.json
 Demo inputs are **synthetic**. System-wide process enumeration and firmware
 gate attribution are **not implemented or proven**.
 See [Research Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md).
+
+## live agent v0.18 (experimental, WIP)
+
+LAN-paired **self-process telemetry** from an optional `live_agent.elf` to
+a bounded Windows/Linux TCP receiver. The PC displays a read-only live
+dashboard at `http://127.0.0.1:8769`. A 256-bit shared key authenticates
+sessions using HMAC-SHA256 challenge/response; each event is MAC-checked.
+Generated keys and the private C configuration are never tracked.
+
+```powershell
+python -m unittest tests.test_live_agent tests.test_pkg_stage -v
+python -m host.ps4_sender.live_agent --help
+```
+
+The **actual PS4 ELF build/runtime is not yet verified**, and no installable
+PKG has been built. The packaging script only stages independently created
+OpenOrbis application inputs; an ELF for `elfldr` is *not* a PKG `eboot.bin`.
+The ordinary userspace agent does not collect global syscalls or inspect
+other processes, PSN requests or TLS content.
+
+See [Live Agent v0.18](docs/LIVE-AGENT-v18.md) for pairing, local simulator,
+optional SDK build, packaging prerequisites and limitations.
 
 ## hardware evidence
 
@@ -211,6 +233,9 @@ flowchart LR
 - [ ] correlate system-process events with network observations
 - [ ] investigate whether the version check is even interceptable
 - [x] unified offline workbench, deterministic replay, integrity and local dashboard
+- [x] bounded authenticated LAN telemetry (host + C mock)
+- [ ] live agent ELF cross-build and runtime on PS4 12.52
+- [ ] installable PKG application built with OpenOrbis and validated on console
 - [ ] read-only system process inventory validated on console
 - [ ] live PS4 gateway capture and independently timed gate analysis
 - [ ] packaging and end-user deployment
@@ -219,6 +244,7 @@ flowchart LR
 
 | | |
 |---|---|
+| [Live Agent v0.18](docs/LIVE-AGENT-v18.md) | authenticated metadata stream, PC dashboard, PS4 ELF and PKG staging |
 | [Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md) | case, firmware diff, assistant, replay and dashboard |
 | [Gate Trace v0.16](docs/GATE-TRACE-v16.md) | offline Observer and prompt metadata timeline |
 | [RE Toolkit v0.14](docs/RE-TOOLKIT-v14.md) | report commands, Ghidra inventory |

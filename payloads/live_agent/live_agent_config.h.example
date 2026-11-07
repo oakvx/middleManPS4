@@ -1,0 +1,6 @@
+/* Example only; DO NOT use real secrets in source control.
+ * Generate the private live_agent_config.h via the Python config CLI.
+ */
+#define MMPS4_PC_IP "192.168.137.1"
+#define MMPS4_PC_PORT 8768
+#define MMPS4_PAIR_KEY_HEX "REPLACE_WITH_64_HEX_CHARACTERS"
