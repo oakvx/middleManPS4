@@ -2,7 +2,7 @@
 
 # middleManPS4
 
-**PS4 payload lab · offline Orbis/ELF reverse engineering · network observability**
+**PS4 payload lab · offline Orbis/ELF analysis · metadata-only network observability**
 
 <p>
 <img src="https://img.shields.io/badge/status-research%20%2F%20WIP-F5A623?style=flat-square"/>
@@ -10,86 +10,95 @@
 <img src="https://img.shields.io/badge/snapshot-v0.17.0-64748B?style=flat-square"/>
 <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"/>
 <img src="https://img.shields.io/github/actions/workflow/status/oakvx/middleManPS4/ci.yml?branch=main&style=flat-square&label=CI"/>
+<img src="https://img.shields.io/github/last-commit/oakvx/middleManPS4?style=flat-square"/>
+<img src="https://img.shields.io/github/languages/top/oakvx/middleManPS4?style=flat-square"/>
+<img src="https://img.shields.io/github/repo-size/oakvx/middleManPS4?style=flat-square"/>
+<img src="https://img.shields.io/github/issues/oakvx/middleManPS4?style=flat-square"/>
+<img src="https://img.shields.io/github/stars/oakvx/middleManPS4?style=flat-square"/>
+<img src="https://img.shields.io/badge/license-none%20published-64748B?style=flat-square"/>
 </p>
 
-ex `fwSpoofer`. Three things that are easier to study together: how a PS4 loads a payload, what's inside the binaries, what's visible on the wire.
-
-[Quick start](#quick-start) · [The question](#the-actual-question) · [Toolkit](#toolkit) · [Evidence](#hardware-evidence) · [Architecture](#architecture) · [Roadmap](#roadmap)
+Formerly `fwSpoofer`.
 
 </div>
 
-```text
-PS4 (BD-JB + GoldHEN)       Windows / WSL host
-─────────────────────       ──────────────────
-elfldr :9021        ──────► ELF validator + sender
-firmware readout     ──────► structured evidence (JSON)
-network traffic*     ──────► capture + baseline correlation
+> **Scope.** Research tooling for a console and a network you own. This is **not** a PSN unlocker: no firmware-version spoofing, no PSN authentication bypass, no TLS interception or decryption, no credential capture. Every capability below is labelled *tested*, *untested* or *not implemented*.
 
-ELF / SFO / Orbis files ────► rekit ──► JSON / Markdown
-                                  ▲
-                              Ghidra (optional)
+## Contents
 
-* only if the host is actually on the packet path
+- [Research question](#research-question)
+- [System overview](#system-overview)
+- [Components](#components)
+- [Design constraints](#design-constraints)
+- [Quick start](#quick-start)
+- [CLI reference](#cli-reference)
+- [Hardware evidence](#hardware-evidence)
+- [Roadmap](#roadmap)
+- [Documentation](#documentation)
+- [Safety and license](#safety-and-license)
+
+## Research question
+
+Does PSN check the reported system version client-side, server-side or both, and is that check even reachable from the network path? Unknown. Three preconditions must hold before "spoofing" is more than a hypothesis, and none is established:
+
+- [ ] PS4 → Internet traffic is visible to an observer (same Wi-Fi does not imply on-path).
+- [ ] The version claim travels somewhere outside TLS (likely blocker).
+- [ ] The server side cares, independently of the client.
+
+The repository gathers evidence on these three points; it does not try to bypass them.
+
+## System overview
+
+```mermaid
+flowchart LR
+    subgraph PS4["PS4 (BD-JB + GoldHEN)"]
+        A["GoldHEN"] --> B["elfldr :9021"]
+        B --> C["test ELF"]
+    end
+    subgraph Host["Windows / WSL host (Python 3.11+, stdlib only)"]
+        D["PS4 payload SDK"] --> E["elfcheck + transport"]
+        F["psn_netdiag / psn_triage / psn_tunnel"]
+        G["rekit"]
+        H["Ghidra headless (optional)"] --> G
+        G --> I[("JSON / Markdown reports")]
+        F --> I
+        W["workbench · gate_trace"] --> I
+    end
+    E -->|ELF| B
+    C -.->|stdout / readout| I
+    J["gateway / mirror (unverified)"] -.-> F
 ```
 
-> **Not a PSN unlocker.** No firmware-version spoof, no PSN auth bypass, no TLS decryption, no online-on-unsupported-firmware. Every claim in this README is tagged tested, untested, or not implemented.
+## Components
 
----
+| Path | Language | Role | Touches console |
+| --- | --- | --- | --- |
+| `payloads/` (`hello_world`, `firmware_info`, `observer`, `common`) | C, PS4 payload SDK | Test payloads, built with `make` and `PS4_PAYLOAD_SDK` | Yes, via `elfldr` |
+| `host/ps4_sender/` `elfcheck`, `transport`, `cli` | Python | Validate an ELF and send it to `elfldr` on TCP 9021 | Yes |
+| `host/ps4_sender/diagnostics.py` | Python | Read-only firmware readout (`sceKernelGetSystemSwVersion`) | Yes |
+| `host/ps4_sender/psn_netdiag`, `psn_triage`, `psn_diag` | Python | Passive DNS/TCP/TLS **metadata**; baseline vs. sign-in attempt | No |
+| `host/ps4_sender/psn_tunnel.py` | Python | Opaque HTTPS `CONNECT` forwarder that logs metadata only (see below) | Network only |
+| `host/ps4_sender/rekit/` | Python | Offline ELF / Orbis / PSF / NID / symbol inspection, reports, Ghidra bridge | No |
+| `host/ps4_sender/gate_trace.py` | Python | Offline correlator of `observer.elf` stdout and network metadata around a manual marker | No |
+| `host/ps4_sender/workbench.py`, `workbench_ui.py` | Python | Unified case builder, integrity verification, replay, localhost dashboard | No |
 
-## the actual question
+The host package has **no runtime dependencies** (`dependencies = []`).
 
-Does PSN check the reported system version client-side, server-side, or both — and is that check even reachable from the network path? Unknown. Three things have to hold before "spoofing" is more than a hypothesis, and none of them hold yet:
+### Observer ELF (experimental)
 
-- [ ] PS4 → Internet traffic is visible to an observer (same Wi-Fi ≠ on-path)
-- [ ] the version claim travels somewhere outside TLS — likely blocker
-- [ ] the server side even cares, independent of the client
+`observer.elf` is a read-only self-observation prototype: it reads firmware information, prints its own PID and emits 12 timed heartbeats. Host-C mock tests pass; PS4 cross-build and runtime are **not verified**. It does not hook PSN processes, decrypt TLS, collect credentials, spoof firmware or bypass authentication. See [Observer v0.15](docs/OBSERVER-v15.md).
 
-This repo exists to chip away at those three with evidence, not to skip past them.
+### Gate trace v0.16 (offline)
 
----
-
-## toolkit
-
-| | |
-|---|---|
-| payload lab | build/validate test ELF, send over the tested `elfldr` path |
-| firmware diagnostics | read-only `sceKernelGetSystemSwVersion`, nothing else |
-| network lab | passive DNS/TLS/TCP metadata, baseline vs. sign-in attempt |
-| rekit | offline ELF/Orbis/PSF/NID inspection, JSON/Markdown reports, optional Ghidra export |
-
-## observer ELF (experimental, WIP)
-
-The new `observer.elf` is a **read-only self-observation prototype**:
-it reads firmware information, prints its own PID and emits 12 timed
-heartbeats. Host-C mock tests pass; PS4 cross-build/runtime is **not yet
-verified**. It does **not** hook PSN processes, decrypt TLS, collect
-credentials, spoof firmware, or bypass authentication.
-
-See [Observer v0.15](docs/OBSERVER-v15.md) for exact limitations and
-the optional experimental build.
-
-## gate trace v0.16 (offline, WIP)
-
-A new metadata-only correlator reads allowlisted `observer.elf` stdout and
-an existing `psn_netdiag` JSON. You can annotate when the update dialog
-appeared and count DNS/TCP/TLS **metadata** on either side of the marker.
-The clock marker is entered manually; this is **not** synchronized PSN
-process tracing or proof of a local/server firmware gate.
+Reads allowlisted `observer.elf` stdout and an existing `psn_netdiag` JSON, then counts DNS/TCP/TLS metadata on either side of a manually entered "update dialog appeared" marker. The clock marker is manual: this is **not** synchronized process tracing and not proof of a local or server firmware gate. Bundled inputs are synthetic. See [Gate Trace v0.16](docs/GATE-TRACE-v16.md).
 
 ```powershell
 python -m host.ps4_sender.gate_trace --observer examples/observer_v016_sample.txt --network examples/netmeta_v016_sample.json --prompt-second 5 --window-seconds 3
 ```
 
-The included inputs are **synthetic examples**; no PS4 access is needed.
-See [Gate Trace v0.16](docs/GATE-TRACE-v16.md) for limitations.
+### Research workbench v0.17 (offline)
 
-## research workbench v0.17 (offline, WIP)
-
-The unified workbench combines the experimental Observer stdout parser,
-metadata-based Network Intelligence, offline ELF/PSF static binary diff, a
-**localhost-only read-only dashboard**, rule-based analysis with separately
-opt-in *local* Ollama, a non-transmitting event replay, and SHA-256 integrity
-reports.
+Combines the Observer stdout parser, metadata-based network intelligence, offline ELF/PSF static diff, a **localhost-only read-only dashboard**, rule-based analysis (local Ollama only if separately opted in), a non-transmitting event replay and SHA-256 integrity reports. Demo inputs are synthetic. System-wide process enumeration and firmware-gate attribution are **not implemented or proven**. See [Research Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md).
 
 ```powershell
 New-Item -ItemType Directory -Force .\reports | Out-Null
@@ -98,26 +107,39 @@ python -m host.ps4_sender.workbench verify --report reports\synthetic.json
 python -m host.ps4_sender.workbench dashboard --report reports\synthetic.json
 ```
 
-Demo inputs are **synthetic**. System-wide process enumeration and firmware
-gate attribution are **not implemented or proven**.
-See [Research Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md).
+### `psn_tunnel`: metadata-only CONNECT forwarder
 
-## hardware evidence
+A strict forwarder for a user's own PS4. It relays opaque encrypted bytes and is explicitly not a TLS MITM.
 
-One console: PS4, 12.52, BD-JB, GoldHEN 2.4b18.7. Nothing below generalizes past this config.
+| Property | Behavior |
+| --- | --- |
+| Client | Exactly one private IPv4 (`--client-ip`); other sources are dropped |
+| Listening | Loopback by default; LAN requires `--allow-lan`. **Dry run** unless `--serve` is given |
+| Window | 5–300 s listening time; each tunnel capped at 120 s; at most 8 concurrent |
+| Requests | `CONNECT host:443` only, strict header syntax; no plaintext forwarding |
+| Destinations | Valid public hostnames or global IPs; `localhost`, `.local`, `.internal` and non-global addresses are refused |
+| DNS | Resolved once and connected to a vetted global address (no second lookup, no rebinding) |
+| Logging | Host, port, result and byte counts only. No headers, bodies, tokens, certificates or TLS records |
+| Report | Optional JSONL, **new file only** |
 
-| | result |
-|---|---|
-| build + offline host tests | host Python/C tests; see CI for latest results |
-| GoldHEN → `elfldr` on TCP 9021 | tested |
-| hello-world payload | tested — notification on console |
-| firmware readout | tested — returns `12.520.001` |
-| Ghidra headless export | untested — checked offline only |
-| PS4 → Internet traffic visibility | not demonstrated |
-| firmware-version spoofing | not implemented |
-| PSN sign-in bypass | not implemented, no evidence it's feasible |
+```powershell
+# dry run: validates arguments, opens nothing
+python -m host.ps4_sender.psn_tunnel --client-ip 192.168.1.50 --report reports\tunnel.jsonl
+# serve on the LAN for the PS4 only
+python -m host.ps4_sender.psn_tunnel --client-ip 192.168.1.50 --bind 192.168.1.10 --allow-lan --serve --seconds 90
+```
 
-## quick start
+Then set the PS4 HTTPS proxy to the host address and port, and **remove it afterwards**.
+
+## Design constraints
+
+- **Read-only on the console.** Firmware readout and observer only read; nothing patches, hooks or injects into system processes.
+- **No overwrite.** Report and Markdown writers create new files exclusively; `--output` never replaces an existing file.
+- **Metadata only.** Network tooling records DNS/TCP/TLS metadata. No credential capture, TLS decryption or endpoint impersonation.
+- **Claims are tagged.** A static string match is not proof that a code path runs, and not proof that PSN accepts anything.
+- **Single-config evidence.** Results apply to one console and firmware only (below).
+
+## Quick start
 
 ```powershell
 git clone https://github.com/oakvx/middleManPS4.git
@@ -131,115 +153,97 @@ python -m host.ps4_sender.rekit analyze .\dist\firmware_info.elf --output .\repo
 python -m host.ps4_sender.rekit markdown .\reports\case.json --output .\reports\case.md
 ```
 
-`--output` never overwrites — use a new filename per run.
-
-<details>
-<summary><b>rekit — offline binary analysis</b></summary>
-
-Reads files already on disk. Never touches the console.
-
-```powershell
-python -m host.ps4_sender.rekit binary  .\dist\firmware_info.elf
-python -m host.ps4_sender.rekit orbis   .\dist\firmware_info.elf
-python -m host.ps4_sender.rekit symbols .\dist\firmware_info.elf
-python -m host.ps4_sender.rekit nids    .\dist\firmware_info.elf
-python -m host.ps4_sender.rekit batch   .\dist --glob "*.elf"
-python -m host.ps4_sender.rekit analyze-diff .\reports\before.json .\reports\after.json
-```
-
-A static string match is not proof a code path runs, and definitely not proof PSN accepts anything.
-
-</details>
-
-<details>
-<summary><b>building payloads</b></summary>
+Build payloads (targets the tested `elfldr` TCP 9021 path):
 
 ```bash
 export PS4_PAYLOAD_SDK="$HOME/ps4-payload-sdk-1252"
 make
 ```
 
-Targets the tested `elfldr` TCP 9021 path. A successful upload ≠ successful execution — check the console. Read [payload-development.md](docs/payload-development.md) first. Bad payloads crash consoles.
+A successful upload is not a successful execution: check the console. Read [payload-development.md](docs/payload-development.md) first; bad payloads crash consoles.
 
-</details>
-
-<details>
-<summary><b>network lab</b></summary>
+Network lab:
 
 ```powershell
 python -m host.ps4_sender.psn_netdiag interfaces
 python -m host.ps4_sender.psn_triage --baseline baseline.json --attempt psn_attempt.json
 ```
 
-Same Wi-Fi ≠ on-path. A local ping reply proves nothing about PS4 → Internet visibility — see [PSN-VISIBILITY-v11.md](docs/PSN-VISIBILITY-v11.md). No credential capture, no TLS decryption, no endpoint impersonation.
+A local ping reply proves nothing about PS4 → Internet visibility. See [PSN-VISIBILITY-v11.md](docs/PSN-VISIBILITY-v11.md).
 
-</details>
+Tooling: Python 3.11+, `ruff` (line length 100; rules `E, F, I, UP, B`), `unittest`. Checksums for release artifacts are in `SHA256SUMS.txt`.
 
-## architecture
+## CLI reference
 
-```mermaid
-flowchart LR
-    subgraph PS4
-        A["BD-JB + GoldHEN"] --> B["elfldr :9021"]
-        B --> C["test ELF"]
-    end
-    subgraph Host["Windows / WSL"]
-        D["SDK"] --> E["validator / sender"]
-        F["net diagnostics"]
-        G["rekit"]
-        H["Ghidra (optional)"] --> G
-        G --> I[("JSON / Markdown")]
-        F --> I
-    end
-    E -->|ELF| B
-    C -.->|output| I
-    J["gateway / mirror, unverified"] -.-> F
-```
+`python -m host.ps4_sender.rekit <command>`: all commands read files already on disk and never touch the console.
 
-## roadmap
+| Command | Input | Output |
+| --- | --- | --- |
+| `binary`, `orbis`, `dynlib`, `psf`, `symbols`, `nids` | file | JSON inspection |
+| `net` | `psn_netdiag` summary | JSON network map |
+| `analyze` | ELF (+ `--ghidra-inventory`, `--network-summary`) | One-pass JSON report; `--output` for a new file |
+| `markdown` | analysis JSON | Markdown |
+| `batch` | directory (`--glob`, default `*.elf`; `--limit`, default 32) | Bounded JSON index |
+| `analyze-diff`, `net-diff`, `ghidra-diff` | baseline, attempt | JSON diff |
+| `ghidra-plan`, `ghidra-run` | unpacked ELF, `--ghidra-home`, `--project-dir`, `--output` | Headless export plan / run |
+| `ghidra-summary` | Ghidra inventory | JSON summary |
 
-- [x] payload build + validate
+Exit codes: `0` success, `1` failed Ghidra run, `2` toolkit error.
+
+## Hardware evidence
+
+One console: PS4, firmware 12.52, BD-JB, GoldHEN 2.4b18.7. Nothing below generalizes past this configuration.
+
+| Item | Result |
+| --- | --- |
+| Build and offline host tests | Host Python/C tests; see CI |
+| GoldHEN → `elfldr` on TCP 9021 | tested |
+| `hello_world` payload | tested (notification on console) |
+| Firmware readout | tested, returns `12.520.001` |
+| Ghidra headless export | untested (checked offline only) |
+| Observer ELF on console | untested (host mocks only) |
+| PS4 → Internet traffic visibility | not demonstrated |
+| Firmware-version spoofing | not implemented |
+| PSN sign-in bypass | not implemented, no evidence it is feasible |
+
+## Roadmap
+
+- [x] Payload build and validate
 - [x] GoldHEN + `elfldr` on real hardware
-- [x] read-only firmware info
-- [x] host test scaffolding
-- [x] passive network metadata
-- [x] offline ELF/Orbis/PSF/NID inspection
-- [x] add read-only observer prototype (host mocks only)
-- [ ] run the Ghidra export on a real install
-- [ ] show PS4 → Internet visibility through a gateway/mirror
-- [x] offline metadata-only prompt/Observer report (manual marker)
-- [ ] correlate system-process events with network observations
-- [ ] investigate whether the version check is even interceptable
-- [x] unified offline workbench, deterministic replay, integrity and local dashboard
-- [ ] read-only system process inventory validated on console
-- [ ] live PS4 gateway capture and independently timed gate analysis
-- [ ] packaging and end-user deployment
+- [x] Read-only firmware info
+- [x] Host test scaffolding
+- [x] Passive network metadata
+- [x] Offline ELF/Orbis/PSF/NID inspection
+- [x] Read-only observer prototype (host mocks only)
+- [x] Offline metadata-only gate trace (manual marker)
+- [x] Unified offline workbench, deterministic replay, integrity, local dashboard
+- [ ] Run the Ghidra export on a real install
+- [ ] Show PS4 → Internet visibility through a gateway/mirror
+- [ ] Correlate system-process events with network observations
+- [ ] Investigate whether the version check is interceptable at all
+- [ ] Read-only system process inventory validated on console
+- [ ] Live gateway capture and independently timed gate analysis
+- [ ] Packaging and end-user deployment
 
-## docs
+## Documentation
 
-| | |
-|---|---|
-| [Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md) | case, firmware diff, assistant, replay and dashboard |
-| [Gate Trace v0.16](docs/GATE-TRACE-v16.md) | offline Observer and prompt metadata timeline |
-| [RE Toolkit v0.14](docs/RE-TOOLKIT-v14.md) | report commands, Ghidra inventory |
-| [Network visibility v0.11](docs/PSN-VISIBILITY-v11.md) | what "on-path" actually means |
-| [PSN NetLab v0.10](docs/PSN-NETLAB-v10.md) | metadata diagnostics |
-| [Payload development](docs/payload-development.md) | building and running test payloads |
-| [Architecture](docs/architecture.md) | components and assumptions |
-| [Changelog](CHANGELOG.md) | history |
+| Document | Content |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Components and assumptions |
+| [Workbench v0.17](docs/RESEARCH-WORKBENCH-v17.md) | Case, firmware diff, assistant, replay, dashboard |
+| [Gate Trace v0.16](docs/GATE-TRACE-v16.md) | Observer and prompt metadata timeline |
+| [Observer v0.15](docs/OBSERVER-v15.md) | Prototype and limitations |
+| [RE Toolkit v0.14](docs/RE-TOOLKIT-v14.md) | Report commands, Ghidra inventory |
+| [Network visibility v0.11](docs/PSN-VISIBILITY-v11.md) | What "on-path" means |
+| [PSN NetLab v0.10](docs/PSN-NETLAB-v10.md) | Metadata diagnostics |
+| [Payload development](docs/payload-development.md) | Building and running test payloads |
+| [Runbook](docs/RUNBOOK.md) · [Setup](docs/setup.md) · [Troubleshooting](docs/troubleshooting.md) | Operations |
+| [Changelog](CHANGELOG.md) | History |
 
-## safety
+## Safety and license
 
-Your own hardware and network, or explicit authorization — nothing else. Don't use accounts you care about. Never post credentials, tokens, or packet captures with personal data in issues.
+Use only your own hardware and network, or explicit authorization. Do not use accounts you care about. Never post credentials, tokens or packet captures containing personal data in issues.
 
-## license
+No license is published. Public source is not permission to reuse or redistribute.
 
-None published. Public source ≠ permission to reuse or redistribute.
-
----
-
-<div align="center">
-
-issues with reproducible evidence > issues asking "does it work yet"
-
-</div>
+Issues with reproducible evidence are preferred over "does it work yet".
